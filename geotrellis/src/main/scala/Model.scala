@@ -1,15 +1,12 @@
 package chatta
 
-import geotrellis._
-import geotrellis.source._
+import geotrellis.engine._
+import geotrellis.engine.op.local._
+import geotrellis.engine.op.zonal.summary._
 import geotrellis.raster._
-import geotrellis.raster.op._
-import geotrellis.raster.op.zonal.summary._
-import geotrellis.feature._
-import geotrellis.feature.rasterize.Callback
-import geotrellis.Implicits._
-
-import geotrellis.feature.rasterize.Rasterizer
+import geotrellis.raster.op.zonal.summary.{FullTileIntersection, PartialTileIntersection}
+import geotrellis.raster.rasterize._
+import geotrellis.vector._
 
 import com.vividsolutions.jts.{ geom => jts }
 
@@ -24,7 +21,7 @@ case class LayerRatio(sum:Int,count:Int) {
 }
 
 object LayerRatio {
-  def rasterResult (r:Raster):LayerRatio = {
+  def rasterResult (r:Tile):LayerRatio = {
     var sum = 0
     var count = 0
     r.foreach { x => 
@@ -56,25 +53,23 @@ object Model {
       layers.zip(weights).map { case (layer,weight) =>
         val tileCache = Main.getCachedRatios(layer)
         RasterSource(s"albers_$layer")
-          .mapIntersecting(Polygon(polygon,0), tileCache) {
+          .mapIntersecting(Polygon(polygon), tileCache) {
             tileIntersection =>
               tileIntersection match {
                 case FullTileIntersection(tile) =>
                   LayerRatio.rasterResult(tile)
-                case PartialTileIntersection(tile, intersections) =>
+                case PartialTileIntersection(tile, extent, intersection) =>
                   var sum: Int = 0
                   var total: Int = 0
-                  val f = new Callback[Geometry,Any] {
-                    def apply(col:Int, row:Int, g:Geometry[Any]) {
+                  val f = new Callback {
+                    def apply(col:Int, row:Int) {
                       total += 1
                       val z = tile.get(col,row)
                       if (isData(z)) { sum += z }
                     }
                   }
 
-                  intersections.foreach { g =>
-                    Rasterizer.foreachCellByFeature(g, tile.rasterExtent)(f)
-                  }
+                  Rasterizer.foreachCellByGeometry(intersection, RasterExtent(extent, tile.cols, tile.rows))(f)
                   LayerRatio(sum, total)
               }
           }

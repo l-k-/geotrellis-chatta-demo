@@ -1,18 +1,12 @@
 package chatta
 
-import geotrellis.process._
-import geotrellis._
-import geotrellis.source._
+import geotrellis.engine._
 import geotrellis.raster._
-import geotrellis.raster.op._
-import geotrellis.feature._
+import geotrellis.vector._
 
-import com.typesafe.config.{ConfigFactory,Config}
+import com.typesafe.config.ConfigFactory
 
-import akka.actor.{ ActorRef, Props, Actor, ActorSystem }
-import akka.routing.FromConfig
-
-import akka.actor.{ActorSystem, Props}
+import akka.actor.Props
 import akka.io.IO
 import spray.can.Http
 
@@ -63,7 +57,7 @@ object Main {
     if(!initCache) 
       return
 
-    implicit val system = server.system
+    implicit val system = GeoTrellis.engine.system
 
     val config = ConfigFactory.load()
     val staticPath = config.getString("geotrellis.server.static-path")
@@ -74,7 +68,7 @@ object Main {
     val service = 
       system.actorOf(Props(classOf[ChattaServiceActor], staticPath), "chatta-service")
 
-    // start a new HTTP server on port 8080 with our service actor as the handler
+    // start a new HTTP server on the given port with our service actor as the handler
     IO(Http) ! Http.Bind(service, host, port = port)
   }
 

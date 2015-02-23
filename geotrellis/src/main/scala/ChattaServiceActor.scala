@@ -1,26 +1,18 @@
 package chatta
 
-import geotrellis._
-import geotrellis.source._
+import geotrellis.engine._
+import geotrellis.engine.op.local._
+import geotrellis.engine.render._
+import geotrellis.engine.stats._
+import geotrellis.raster._
+import geotrellis.raster.render._
 import geotrellis.services._
-import geotrellis.data.geojson._
-import geotrellis.render._
+import geotrellis.vector._
+import geotrellis.vector.json._
 
-import java.io.File
-import org.parboiled.common.FileUtils
-import scala.concurrent.duration._
 import akka.actor._
-import akka.pattern.ask
-import spray.routing.{HttpService, RequestContext}
-import spray.routing.directives.CachingDirectives
-import spray.can.server.Stats
-import spray.can.Http
-import spray.httpx.marshalling.Marshaller
-import spray.httpx.encoding.Gzip
-import spray.util._
+import spray.routing.HttpService
 import spray.http._
-import MediaTypes._
-import CachingDirectives._
 
 import com.vividsolutions.jts.{ geom => jts }
 
@@ -55,15 +47,12 @@ trait ChattaService extends HttpService {
               val layers = layersParam.split(",")
               val weights = weightsParam.split(",").map(_.toInt)
 
-
               Model.weightedOverlay(layers,weights,re)
                 .classBreaks(numBreaks)
                 .run match {
-                  case process.Complete(breaks, _) =>
-                    val breaksArray = breaks.mkString("[", ",", "]")
-                    val json = s"""{ "classBreaks" : $breaksArray }"""
-                    complete(json)
-                  case process.Error(message,trace) =>
+                  case Complete(breaks, _) =>
+                    complete(Json.classBreaks(breaks))
+                  case Error(message,trace) =>
                     failWith(new RuntimeException(message))
               }
             }
@@ -99,18 +88,15 @@ trait ChattaService extends HttpService {
                 if(mask == "") {
                   model
                 } else {
-                  GeoJsonReader.parse(mask) match {
-                    case Some(geomArray) =>
-                      if(geomArray.length != 1)
+
+                  val transformed: jts.Geometry =
+                    GeoJson.parse[Polygon](mask) match {
+                      case Polygon(poly: jts.Polygon) =>
+                        Transformer.transform(poly, Projections.LatLong, Projections.WebMercator)
+                      case _ =>
                         throw new Exception(s"Invalid GeoJSON: $mask")
-                      val transformed =
-                        geomArray.head.mapGeom { g =>
-                          Transformer.transform(g,Projections.LatLong,Projections.WebMercator)
-                        }
-                      model.mask(transformed)
-                    case None =>
-                      throw new Exception(s"Invalid GeoJSON: $mask")
-                  }
+                    }
+                  model.mask(Geometry.fromJts[Geometry](transformed))
                 }
               
               val breaks =
@@ -125,11 +111,11 @@ trait ChattaService extends HttpService {
               val png:ValueSource[Png] = overlay.renderPng(ramp, breaks)
 
               png.run match {
-                case process.Complete(img,h) =>
+                case Complete(img,h) =>
                   respondWithMediaType(MediaTypes.`image/png`) {
-                    complete(img)
+                    complete(img.bytes)
                   }
-                case process.Error(message,trace) =>
+                case Error(message,trace) =>
                   println(message)
                   println(trace)
                   println(re)
@@ -146,31 +132,21 @@ trait ChattaService extends HttpService {
             (polygonJson,layersString,weightsString) => {
               val start = System.currentTimeMillis()
 
-              val poly =
-                GeoJsonReader.parse(polygonJson) match {
-                  case Some(geomArray) =>
-                    if(geomArray.length != 1)
-                      throw new Exception(s"Invalid GeoJSON: $polygonJson")
-                    geomArray.head.geom match {
-                      case p: jts.Polygon =>
-                        Transformer.transform(p,Projections.LatLong,Projections.ChattaAlbers)
-                          .asInstanceOf[jts.Polygon]
-                      case _ =>
-                        throw new Exception(s"Invalid GeoJSON: $polygonJson")
-                    }
-                  case None =>
+              val transformed =
+                GeoJson.parse[Polygon](polygonJson) match {
+                  case Polygon(poly: jts.Polygon) =>
+                    Transformer.transform(poly, Projections.LatLong, Projections.ChattaAlbers)
+                      .asInstanceOf[jts.Polygon]
+                  case _ =>
                     throw new Exception(s"Invalid GeoJSON: $polygonJson")
                 }
-
-              val re = Main.getRasterExtent(poly)
-
               val layers = layersString.split(",")
               val weights = weightsString.split(",").map(_.toInt)
 
-              val summary = Model.summary(layers,weights,poly)
+              val summary = Model.summary(layers,weights,transformed)
 
               summary.run match {
-                case process.Complete(result,h) =>
+                case Complete(result,h) =>
                   val elapsedTotal = System.currentTimeMillis - start
 
                   val layerSummaries =
@@ -188,7 +164,7 @@ trait ChattaService extends HttpService {
                           "elapsed": "$elapsedTotal"
                         }"""
                   complete(data)
-                case process.Error(message,trace) =>
+                case Error(message,trace) =>
                   failWith(new RuntimeException(message))
               }
             }

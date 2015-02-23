@@ -1,8 +1,5 @@
 package chatta
 
-import geotrellis._
-import geotrellis.feature._
-
 import org.geotools.geometry.jts.JTS
 import org.geotools.referencing.CRS
 import org.opengis.referencing.crs.{CoordinateReferenceSystem => Crs}
@@ -57,10 +54,7 @@ object Transformer {
 
   initCache()
 
-  def transform[D](feature:Geometry[D],fromCRS:Crs,toCRS:Crs):Geometry[D] =
-    feature.mapGeom( geom => transform(geom, fromCRS, toCRS))
-
-  def transform[D](geom:jts.Geometry,fromCRS:Crs,toCRS:Crs):jts.Geometry = {
+  def transform(geom:jts.Geometry,fromCRS:Crs,toCRS:Crs):jts.Geometry = {
     if(!transformCache.contains((fromCRS,toCRS))) { cacheTransform(fromCRS,toCRS) }
     JTS.transform(geom, transformCache((fromCRS,toCRS)))
   }

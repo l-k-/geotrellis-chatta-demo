@@ -2,19 +2,23 @@ import AssemblyKeys._
 
 name := "GeoTrellis Tutorial Project"
 
-scalaVersion := "2.10.0"
+scalaVersion := "2.11.2"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
-resolvers +=       "Geotools" at "http://download.osgeo.org/webdav/geotools/"
+resolvers += "Geotools" at "http://download.osgeo.org/webdav/geotools/"
+
+resolvers += "spray repo" at "http://repo.spray.io/"
 
 libraryDependencies ++= Seq(
-  "com.azavea.geotrellis" %% "geotrellis" % "0.9.0-RC3",
-  "com.azavea.geotrellis" %% "geotrellis-services" % "0.9.0-RC3",
-  "io.spray" % "spray-routing" % "1.2.2",
-  "io.spray" % "spray-can" % "1.2.2",
-  "org.geotools" % "gt-main" % "8.0-M4",
-  "org.geotools" % "gt-coveragetools" % "8.0-M4"
+  "com.azavea.geotrellis" %% "geotrellis" % "0.10.0-SNAPSHOT",
+  "com.azavea.geotrellis" %% "geotrellis-engine" % "0.10.0-SNAPSHOT",
+  "com.azavea.geotrellis" %% "geotrellis-services" % "0.10.0-SNAPSHOT",
+  "io.spray" %% "spray-routing" % "1.3.2",
+  "io.spray" %% "spray-can" % "1.3.2",
+  "io.spray" %% "spray-http" % "1.3.2",
+  "org.geotools" % "gt-main" % "11.0",
+  "org.geotools" % "gt-coveragetools" % "11.0"
 )
 
 seq(Revolver.settings: _*)
@@ -30,3 +34,5 @@ mergeStrategy in assembly <<= (mergeStrategy in assembly) {
     case _ => MergeStrategy.first
   }
 }
+
+net.virtualvoid.sbt.graph.Plugin.graphSettings
